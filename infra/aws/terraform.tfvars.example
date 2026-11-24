@@ -1,0 +1,5 @@
+aws_region     = "REPLACE_WITH_AWS_REGION"
+domain_name    = "YOUR_EXISTING_DOMAIN"
+instance_type  = "REVIEW_INSTANCE_TYPE"
+root_volume_gb = 30
+backup_retention_days = 30

@@ -1,0 +1,133 @@
+#!/bin/bash
+set -euo pipefail
+exec > >(tee /var/log/ginnery-bootstrap.log | logger -t ginnery-bootstrap -s 2>/dev/console) 2>&1
+
+dnf update -y
+dnf install -y awscli-2 python3.12 python3.12-pip unzip dnf-plugins-core spal-release
+dnf config-manager --enable amazonlinux-spal
+dnf install -y caddy
+
+id ginnery >/dev/null 2>&1 || useradd --system --home-dir /opt/ginnery --shell /sbin/nologin ginnery
+install -d -o root -g root -m 0755 /opt/ginnery /opt/ginnery/app
+install -d -o ginnery -g ginnery -m 0750 /var/lib/ginnery
+
+cat >/etc/ginnery-runtime <<'ENV'
+GINNERY_ENV=production
+GINNERY_HOST=127.0.0.1
+GINNERY_TRUSTED_PROXY=1
+GINNERY_COOKIE_SECURE=1
+GINNERY_DATA_DIR=/var/lib/ginnery
+GINNERY_DATABASE=/var/lib/ginnery/ginnery.sqlite3
+GINNERY_SECRETS_FILE=/run/ginnery/secrets.json
+AWS_REGION=${region}
+GINNERY_BACKUP_S3_BUCKET=${backup_bucket}
+GINNERY_BACKUP_KMS_KEY=${backup_kms_key}
+GINNERY_BACKUP_S3_PREFIX=${backup_prefix}
+GINNERY_APP_SECRET_ARN=${secret_arn}
+GINNERY_DEPLOY_BUCKET=${deploy_bucket}
+GINNERY_DEPLOY_KEY=${deploy_key}
+ENV
+chmod 0644 /etc/ginnery-runtime
+
+cat >/usr/local/bin/ginnery-load-secrets <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+tmp=/run/ginnery/secrets.json.tmp
+aws secretsmanager get-secret-value --secret-id "$GINNERY_APP_SECRET_ARN" --region "$AWS_REGION" --query SecretString --output text > "$tmp"
+/usr/bin/python3.12 - "$tmp" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+required = ("GINNERY_SECRET_KEY", "GINNERY_ADMIN_USER", "GINNERY_ADMIN_PASSWORD", "GINNERY_ADMIN_EMAIL")
+if not isinstance(value, dict) or any(not isinstance(value.get(key), str) or not value[key] for key in required):
+    raise SystemExit("Secrets Manager value is missing one or more required fields.")
+if len(value["GINNERY_SECRET_KEY"]) < 32 or len(value["GINNERY_ADMIN_PASSWORD"]) < 16:
+    raise SystemExit("Signing key must be at least 32 characters; initial admin password at least 16.")
+PY
+chmod 0600 "$tmp"
+mv "$tmp" /run/ginnery/secrets.json
+SCRIPT
+chmod 0755 /usr/local/bin/ginnery-load-secrets
+
+cat >/usr/local/bin/ginnery-deploy <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+. /etc/ginnery-runtime
+tmp=/tmp/ginnery-release.zip
+next=/opt/ginnery/app.next
+rm -rf "$next"
+install -d -m 0755 "$next"
+aws s3 cp "s3://$GINNERY_DEPLOY_BUCKET/$GINNERY_DEPLOY_KEY" "$tmp" --region "$AWS_REGION"
+unzip -oq "$tmp" -d "$next"
+python3.12 -m venv /opt/ginnery/venv
+/opt/ginnery/venv/bin/pip install --disable-pip-version-check --no-cache-dir -r "$next/requirements.txt"
+rm -rf /opt/ginnery/app.previous
+if [ -d /opt/ginnery/app ]; then mv /opt/ginnery/app /opt/ginnery/app.previous; fi
+mv "$next" /opt/ginnery/app
+chown -R root:root /opt/ginnery/app /opt/ginnery/venv
+chmod -R go-w /opt/ginnery/app /opt/ginnery/venv
+systemctl try-restart ginnery.service
+rm -f "$tmp"
+SCRIPT
+chmod 0750 /usr/local/bin/ginnery-deploy
+
+cat >/etc/systemd/system/ginnery.service <<'UNIT'
+[Unit]
+Description=The Ginnery hotel website and booking request service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ginnery
+Group=ginnery
+WorkingDirectory=/opt/ginnery/app
+EnvironmentFile=/etc/ginnery-runtime
+Environment=PYTHONUNBUFFERED=1
+RuntimeDirectory=ginnery
+RuntimeDirectoryMode=0700
+UMask=0077
+ExecStartPre=/usr/local/bin/ginnery-load-secrets
+ExecStart=/opt/ginnery/venv/bin/python /opt/ginnery/app/app.py
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=/var/lib/ginnery /run/ginnery
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+cat >/etc/caddy/Caddyfile <<'CADDY'
+${domain_name} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-For {http.request.remote.host}
+	}
+}
+CADDY
+
+systemctl daemon-reload
+systemctl enable --now caddy
+set -a
+. /etc/ginnery-runtime
+set +a
+/usr/local/bin/ginnery-deploy
+systemctl enable --now ginnery.service
