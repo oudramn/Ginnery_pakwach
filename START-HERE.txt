@@ -1,0 +1,33 @@
+THE GINNERY — WEBSITE AND STAFF PORTAL
+
+START THE LOCAL WEBSITE
+1. Open this folder in Windows Explorer.
+2. Double-click preview-windows.bat, or run "python app.py" in PowerShell here.
+3. Open http://127.0.0.1:8000 in your browser.
+
+PAGES
+Guest website:  http://127.0.0.1:8000/
+Explore:        http://127.0.0.1:8000/explore.html
+Staff portal:   http://127.0.0.1:8000/admin.html
+
+STAFF SIGN-IN
+Use an existing staff account for this database. There is no shared default
+password in the launcher. If startup creates a new administrator, its one-time
+credentials are written to instance/initial-admin-credentials.txt. Secure that
+file, sign in, change the password, and remove the file afterward.
+
+CONTENT MANAGEMENT
+An administrator, manager, or website manager can edit hotel content and
+publish Explore updates and journal stories from the staff portal. Website
+managers only have content tools. Staff handle enquiry follow-up. Only
+administrators manage accounts, roles, amounts due, security settings and
+backups. Managers can record a payment received; this records a manual payment
+entry and does not process a card transaction.
+
+DATA AND HOSTING
+Guest enquiries and staff records use the server-side SQLite database in
+instance/ginnery.sqlite3. Keep the server window open while using this local
+site. The local address is private to this computer; it is not a public link.
+AWS deployment files are prepared but have not been applied. No live payment
+provider or PMS/booking-engine connection is configured. Guest requests still
+require hotel staff to verify availability, price and terms.

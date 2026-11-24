@@ -1,0 +1,59 @@
+/* Shared Ginnery button finish: rounded silhouettes, a quiet lift, and clear keyboard feedback. */
+:where(
+  button,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  .button,
+  .btn,
+  .nav-book,
+  .nav-cta,
+  .back,
+  .control
+) {
+  border-radius: 12px;
+  transition-property: transform, box-shadow, border-color, background-color, color, filter;
+  transition-duration: 240ms;
+  transition-timing-function: cubic-bezier(.2, .7, .2, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keep large photo and chapter cards rectangular; they are content surfaces, not controls. */
+:where(.gallery-item, .frame-card, .run-controls button, .timeline button) {
+  border-radius: 2px;
+}
+
+@media (hover: hover) {
+  :where(button, input[type="button"], input[type="submit"], input[type="reset"], .button, .btn, .nav-book, .nav-cta, .back, .control):not(.gallery-item):not(.frame-card):not(.run-controls button):not(.timeline button):not(.menu-filter):not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(4, 15, 10, .2);
+    filter: brightness(1.035);
+  }
+}
+
+:where(button, input[type="button"], input[type="submit"], input[type="reset"], .button, .btn, .nav-book, .nav-cta, .back, .control):focus-visible {
+  outline: 2px solid var(--gold2, #dfc28d);
+  outline-offset: 3px;
+}
+
+:where(button, input[type="button"], input[type="submit"], input[type="reset"], .button, .btn, .nav-book, .nav-cta, .back, .control):not(.run-controls button):not(.timeline button):active:not(:disabled) {
+  transform: scale(.98);
+  box-shadow: 0 3px 10px rgba(4, 15, 10, .16);
+  transition-duration: 100ms;
+}
+
+:where(button, input[type="button"], input[type="submit"], input[type="reset"]):disabled {
+  cursor: not-allowed;
+  filter: saturate(.72);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, input[type="button"], input[type="submit"], input[type="reset"], .button, .btn, .nav-book, .nav-cta, .back, .control) {
+    transition-duration: .01ms;
+  }
+
+  :where(button, input[type="button"], input[type="submit"], input[type="reset"], .button, .btn, .nav-book, .nav-cta, .back, .control):hover,
+  :where(button, input[type="button"], input[type="submit"], input[type="reset"], .button, .btn, .nav-book, .nav-cta, .back, .control):active {
+    transform: none;
+  }
+}
